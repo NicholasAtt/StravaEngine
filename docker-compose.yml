@@ -1,0 +1,206 @@
+services:
+  broker:
+    image: apache/kafka:4.2.0
+    container_name: broker
+    mem_limit: 1g
+    hostname: broker
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://broker:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@broker:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - running-analytics-net
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  
+  kafka-setup:
+    image: apache/kafka:4.2.0
+    container_name: kafka-setup
+    depends_on:
+      broker:
+        condition: service_healthy
+    entrypoint: >
+      sh -c "
+      echo 'Waiting for Kafka to be ready...' &&
+      sleep 5 &&
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:9092 --create --if-not-exists --topic running-live-data --partitions 2 --replication-factor 1 &&
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:9092 --create --if-not-exists --topic weatherdata --partitions 1 --replication-factor 1 &&
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:9092 --create --if-not-exists --topic airquality --partitions 1 --replication-factor 1 &&
+      echo 'Topics created successfully.'
+      "
+    networks:
+      - running-analytics-net
+
+  redis:
+    image: redis:8.2.4-alpine3.22
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - running-analytics-net
+
+  redis-setup:
+    image: redis:8.2.4-alpine3.22
+    container_name: redis-setup
+    depends_on:
+      redis:
+        condition: service_started
+    entrypoint: >
+      sh -c "
+      echo 'Waiting for Redis...' &&
+      sleep 2 &&
+      redis-cli -h redis -p 6379 GEOADD sicily_cities 13.3615 38.1157 palermo 15.0873 37.5079 catania 15.5561 38.1938 messina 15.2866 37.0755 siracusa 12.5372 38.0176 trapani 13.5765 37.3111 agrigento 14.7324 36.9276 ragusa 14.0620 37.4902 caltanissetta 14.2818 37.5674 enna &&
+      echo 'Redis sicily_cities populated.'
+      "
+    networks:
+      - running-analytics-net
+
+  elasticsearch:
+    image: elasticsearch:8.11.4
+    container_name: elasticsearch
+    environment:
+      - node.name=elasticsearch
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -v '\"status\":\"red\"'"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - running-analytics-net
+
+  spark:
+    build: 
+      context: ./docker/spark
+      dockerfile: Dockerfile
+    image: ghost-runner/spark:3.5.0
+    container_name: spark
+    mem_limit: 3g
+    hostname: spark
+    ports:
+      - "4040:4040"
+    healthcheck:
+      disable: true
+    command: >
+      /usr/local/spark/bin/spark-submit 
+      --master local[*] 
+      --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,org.elasticsearch:elasticsearch-spark-30_2.12:8.11.4
+      --driver-memory 2g
+      --executor-memory 2g
+      --conf "spark.sql.shuffle.partitions=2"
+      --conf spark.jars.ivy=/tmp/.ivy2 
+      /opt/spark-src/app.py
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=broker:9092
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - ELASTICSEARCH_HOST=elasticsearch
+      - ELASTICSEARCH_PORT=9200
+      - PYSPARK_PYTHON=python3
+      - PYSPARK_DRIVER_PYTHON=python3
+    volumes:
+        - ./spark/src:/opt/spark-src
+        - spark_data:/opt/spark-data
+        - ./spark/dataset:/opt/spark-input:ro
+        - spark_checkpoints:/tmp/spark-checkpoints
+    depends_on:
+      broker:
+        condition: service_healthy
+      kafka-setup:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - running-analytics-net
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.11.4
+    container_name: logstash
+    restart: on-failure  
+    environment:
+      - XPACK_MONITORING_ENABLED=false
+      - "LS_JAVA_OPTS=-Xms1g -Xmx1g"
+    volumes:
+      - ./logstash/pipeline/:/usr/share/logstash/pipeline/
+    ports:
+      - "8080:8080"
+    depends_on:
+      - broker
+    networks:
+      - running-analytics-net
+
+  strava-injector:
+    build:
+      context: ./docker/scripts 
+      dockerfile: Dockerfile
+    image: ghost-runner/scripts:latest
+    container_name: strava-injector
+    volumes:
+      - ./scripts:/app/scripts 
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - PYTHONPATH=/app
+      - STRAVA_TOKEN=${STRAVA_TOKEN}
+      - LOGSTASH_URL=http://logstash:8080/
+      - ELASTICSEARCH_URL=http://elasticsearch:9200/strava_metrics/_doc
+    depends_on:
+      - redis
+      - logstash
+    networks:
+      - running-analytics-net
+
+  grafana:
+    image: grafana/grafana:12.3-ubuntu
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning
+    environment:
+      - GF_INSTALL_PLUGINS=redis-datasource
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SMTP_ENABLED=${GF_SMTP_ENABLED:-false}
+      - GF_SMTP_HOST=${GF_SMTP_HOST:-smtp.gmail.com:587}
+      - GF_SMTP_USER=${GF_SMTP_USER:-}
+      - GF_SMTP_PASSWORD=${GF_SMTP_PASSWORD:-}
+      - GF_SMTP_FROM_ADDRESS=${GF_SMTP_FROM_ADDRESS:-}
+      - GF_SMTP_FROM_NAME=${GF_SMTP_FROM_NAME:-StravaEngine}
+      - GF_ALERT_EMAIL_TO=${GF_ALERT_EMAIL_TO:-}
+    networks:
+      - running-analytics-net
+
+volumes:
+  grafana_data:
+  redis_data:
+  es_data:
+  spark_checkpoints:
+  spark_data:
+
+networks:
+  running-analytics-net:
+    driver: bridge

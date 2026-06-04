@@ -1,0 +1,24 @@
+apiVersion: 1
+
+datasources:
+  - name: Redis
+    uid: redis-ds
+    type: redis-datasource
+    access: proxy
+    url: redis://redis:6379/0
+    isDefault: true
+    version: 1
+    jsonData:
+      client: standalone
+      poolSize: 5
+      timeout: 10
+      
+  - name: Elasticsearch
+    type: elasticsearch
+    access: proxy
+    url: http://elasticsearch:9200
+    uid: elasticsearch-ds
+    jsonData:
+      index: strava_metrics
+      timeField: timestamp
+      version: "8.11.4"

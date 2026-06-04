@@ -1,0 +1,251 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "elasticsearch",
+        "uid": "elasticsearch-ds"
+      },
+      "description": "Media della frequenza cardiaca riepilogativa delle sessioni",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 140
+              },
+              {
+                "color": "red",
+                "value": 165
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Average avg_hr"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Frequenza media"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "mean"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "bucketAggs": [
+            {
+              "type": "date_histogram",
+              "field": "timestamp",
+              "id": "2",
+              "settings": {
+                "interval": "30d",
+                "min_doc_count": "0"
+              }
+            }
+          ],
+          "metrics": [
+            {
+              "field": "avg_hr",
+              "id": "1",
+              "type": "avg"
+            }
+          ],
+          "query": "event_type.keyword:session_summary AND session_id.keyword:${session}",
+          "refId": "A",
+          "timeField": "timestamp"
+        }
+      ],
+      "title": "Frequenza media",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "elasticsearch",
+        "uid": "elasticsearch-ds"
+      },
+      "description": "Media delle cadenze riepilogative delle sessioni concluse o interrotte",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 150
+              },
+              {
+                "color": "green",
+                "value": 165
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Average avg_cadence"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Cadenza media"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "mean"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "bucketAggs": [
+            {
+              "type": "date_histogram",
+              "field": "timestamp",
+              "id": "2",
+              "settings": {
+                "interval": "30d",
+                "min_doc_count": "0"
+              }
+            }
+          ],
+          "metrics": [
+            {
+              "field": "avg_cadence",
+              "id": "1",
+              "type": "avg"
+            }
+          ],
+          "query": "event_type.keyword:session_summary AND session_id.keyword:${session}",
+          "refId": "A",
+          "timeField": "timestamp"
+        }
+      ],
+      "title": "Cadenza media",
+      "type": "stat"
+    }
+  ],
+  "schemaVersion": 42,
+  "tags": [
+    "strava-engine",
+    "historical"
+  ],
+  "templating": {
+    "list": [
+      {
+        "allValue": "*",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "elasticsearch",
+          "uid": "elasticsearch-ds"
+        },
+        "includeAll": true,
+        "label": "Sessione",
+        "multi": false,
+        "name": "session",
+        "options": [],
+        "query": "{\"find\": \"terms\", \"field\": \"session_id.keyword\", \"size\": 1000}",
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Strava Historical Analytics",
+  "uid": "strava-historical-analytics",
+  "version": 2
+}
