@@ -2,16 +2,13 @@ apiVersion: 1
 
 datasources:
   - name: Redis
-    uid: redis-ds
     type: redis-datasource
+    uid: redis-ds
     access: proxy
-    url: redis://redis:6379/0
+    url: redis:6379
     isDefault: true
-    version: 1
     jsonData:
-      client: standalone
-      poolSize: 5
-      timeout: 10
+      client: text
       
   - name: Elasticsearch
     type: elasticsearch

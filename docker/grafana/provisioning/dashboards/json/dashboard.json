@@ -91,9 +91,7 @@
               "options": "A"
             },
             "location": {
-              "latitude": "latitude",
-              "longitude": "longitude",
-              "mode": "coords"
+              "mode": "auto"
             },
             "name": "Route",
             "tooltip": false,
@@ -120,11 +118,9 @@
             },
             "filterData": {
               "id": "byRefId",
-              "options": "B"
+              "options": "A"
             },
             "location": {
-              "latitude": "latitude",
-              "longitude": "longitude",
               "mode": "auto"
             },
             "name": "Runner",
@@ -136,12 +132,12 @@
           "mode": "details"
         },
         "view": {
-          "allLayers": false,
-          "id": "coords",
-          "lat": 37.5,
-          "lon": 14,
+          "allLayers": true,
+          "id": "zero",
+          "lat": 0,
+          "lon": 0,
           "noRepeat": false,
-          "zoom": 8
+          "zoom": 1
         }
       },
       "pluginVersion": "12.3.3",
@@ -153,17 +149,6 @@
           "keyName": "race:live_tracking",
           "refId": "A",
           "start": "-",
-          "streaming": true,
-          "streamingDataType": "DataFrame",
-          "type": "command"
-        },
-        {
-          "command": "xrevrange",
-          "count": 1,
-          "end": "-",
-          "keyName": "race:live_tracking",
-          "refId": "B",
-          "start": "+",
           "streaming": true,
           "streamingDataType": "DataFrame",
           "type": "command"

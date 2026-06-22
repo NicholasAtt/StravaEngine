@@ -12,13 +12,13 @@ class EnvironmentIngestor:
         """Scarica e salva in memoria i dati ambientali per l'intera giornata"""
         dt = datetime.fromtimestamp(dt_timestamp, tz=timezone.utc)
         date_str = dt.strftime('%Y-%m-%d')
-        print(f"\n Scarico dati meteo e aria per il {date_str}...")
+        print(f"\n Scarico dati meteo per il {date_str}...")
         
         try:
             w_url = f"https://archive-api.open-meteo.com/v1/archive?latitude={lat}&longitude={lon}&start_date={date_str}&end_date={date_str}&hourly=temperature_2m,relative_humidity_2m"
             self.w_data = requests.get(w_url, timeout=5.0).json()
             
-            a_url = f"https://air-quality-api.open-meteo.com/v1/air-quality?latitude={lat}&longitude={lon}&start_date={date_str}&end_date={date_str}&hourly=european_aqi,pm2_5"
+            a_url = f"https://air-quality-api.open-meteo.com/v1/air-quality?latitude={lat}&longitude={lon}&start_date={date_str}&end_date={date_str}&hourly=european_aqi"
             self.a_data = requests.get(a_url, timeout=5.0).json()
         except Exception as e:
             print(f" Attenzione: impossibile scaricare dati meteo reali, userò valori default ({e})")
@@ -38,7 +38,6 @@ class EnvironmentIngestor:
                 
             if self.a_data and "hourly" in self.a_data:
                 aqi = float(self.a_data["hourly"]["european_aqi"][current_hour])
-                pm25 = float(self.a_data["hourly"]["pm2_5"][current_hour])
 
             time_str = datetime.now(timezone.utc).isoformat() if realtime else dt_obj.isoformat()
 
@@ -49,7 +48,7 @@ class EnvironmentIngestor:
             
             req_session.post(self.logstash_url, json={
                 "stream_type": "airquality", "session_id": session_id, "time": time_str, 
-                "aqi": aqi, "pm2_5": pm25
+                "aqi": aqi
             }, verify=False)
             
             self.last_emitted_hour = current_hour

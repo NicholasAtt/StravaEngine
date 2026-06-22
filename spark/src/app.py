@@ -20,7 +20,7 @@ LIVE_DEFAULTS = {
 DEFAULT_ENV = {
     "temperature": 20.0,
     "humidity": 50.0,
-    "aqi": 50,
+    "aqi": 50.0,
 }
 
 DEFAULT_FATIGUE_THRESHOLD = 15.0
@@ -37,7 +37,7 @@ def update_env_cache(partition, topic_type):
                 pipe.hset("env:current", "aqi", getattr(row, "aqi", 50))
         pipe.execute()
     except RedisError as exc:
-        print(f" Redis env cache skipped: {exc}")
+        print(f"Aggiornamento della cache ambiente Redis non andato a buon fine: {exc}")
 
 
 def read_live_context():
@@ -103,7 +103,7 @@ def write_live_to_redis(partition):
             
         pipe.execute()
     except RedisError as exc:
-        print(f" Redis live streams skipped: {exc}")
+        print(f"Scrittura degli stream live su Redis non andata a buon fine: {exc}")
 
 
 def write_agg_to_redis(partition):
@@ -111,12 +111,13 @@ def write_agg_to_redis(partition):
         r = redis.Redis(host="redis", port=6379, decode_responses=True)
         pipe = r.pipeline()
         for row in partition:
-            pipe.xadd("race:cardiac_drift_stream", {
-                "efficiency_factor": float(row.efficiency_factor),
-            }, maxlen=100)
+            if row.efficiency_factor is not None:
+                pipe.xadd("race:cardiac_drift_stream", {
+                    "efficiency_factor": float(row.efficiency_factor),
+                }, maxlen=100)
         pipe.execute()
     except RedisError as exc:
-        print(f" Redis aggregate stream skipped: {exc}")
+        print(f"Scrittura dello stream aggregato su Redis non andata a buon fine: {exc}")
 
 def read_kafka(topic):
     return spark.readStream.format("kafka").option("kafka.bootstrap.servers", "broker:9092") \
@@ -221,6 +222,7 @@ session_summary_df = strava_watermarked.dropna(subset=["session_id"]).groupBy("s
     .withColumn("document_id", concat(lit("session_summary_"), col("session_id")))
 
 query_weather = weather_df.writeStream.foreachBatch(lambda df, _: df.foreachPartition(lambda p: update_env_cache(p, "weather"))).option("checkpointLocation", "/tmp/spark-checkpoints/weather").start()
+
 query_air = air_df.writeStream.foreachBatch(lambda df, _: df.foreachPartition(lambda p: update_env_cache(p, "air"))).option("checkpointLocation", "/tmp/spark-checkpoints/air").start()
 
 query_live = strava_df.writeStream.foreachBatch(process_live_batch) \
