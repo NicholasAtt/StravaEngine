@@ -1,36 +1,36 @@
 # StravaEngine
 
-## Descrizione
+## Description
 
-StravaEngine è una pipeline locale per acquisire, simulare, processare e monitorare in streaming una corsa Strava arricchita con dati ambientali.
+StravaEngine is a local pipeline to acquire, simulate, process, and monitor a Strava run enriched with environmental data in streaming.
 
-Il progetto usa un'architettura a microservizi orchestrata con Docker Compose. I dati della corsa vengono recuperati da Strava, inviati a Logstash, pubblicati su Kafka, elaborati da Spark Structured Streaming e infine salvati su Redis ed Elasticsearch per dashboard live, storico ed alerting.
+The project uses a microservices architecture orchestrated with Docker Compose. Run data is retrieved from Strava, sent to Logstash, published on Kafka, processed by Spark Structured Streaming, and finally saved to Redis and Elasticsearch for live dashboards, historical data, and alerting.
 
-L'obiettivo è costruire una pipeline end-to-end osservabile per un singolo runner:
+The goal is to build an observable end-to-end pipeline for a single runner:
 
-- recuperare attivita reali da Strava;
-- simulare lo streaming dei punti GPS e biometrici;
-- arricchire ogni punto con meteo e qualita dell'aria;
-- stimare la frequenza cardiaca attesa con un modello Spark ML;
-- individuare possibili condizioni di fatica;
-- visualizzare metriche live e storiche in Grafana.
+- retrieve real activities from Strava;
+- simulate the streaming of GPS and biometric points;
+- enrich each point with weather and air quality data;
+- estimate the expected heart rate using a Spark ML model;
+- identify possible fatigue conditions;
+- visualize live and historical metrics in Grafana.
 
 ## Setup
 
-Per eseguire il progetto in locale è necessario avere installato **Docker** con Docker Compose.
+To run the project locally, you need to have **Docker** with Docker Compose installed.
 
 ```bash
-# Clonare il repository
+# Clone the repository
 git clone <repository-url>
 
-# Spostarsi nella directory del progetto
+# Navigate into the project directory
 cd StravaEngine
 
-# Preparare il file ambiente
+# Prepare the environment file
 cp .env.example .env
 ```
 
-Compilare il file `.env` con almeno:
+Fill in the `.env` file with at least:
 
 ```text
 GRAFANA_ADMIN_PASSWORD=change_me
@@ -38,39 +38,39 @@ STRAVA_TOKEN=your_strava_access_token_here
 GF_SMTP_ENABLED=false
 ```
 
-Il file `.env` contiene segreti locali e non deve essere committato.
+The `.env` file contains local secrets and must not be committed.
 
-### Recupero del token Strava
+### Retrieving the Strava token
 
-La pipeline usa `STRAVA_TOKEN` per chiamare le API Strava. Strava usa OAuth2: l'access token è a breve durata, mentre il refresh token serve per generarne uno nuovo quando scade. Il progetto al momento legge solo `STRAVA_TOKEN`, quindi se il token scade bisogna aggiornarlo manualmente nel file `.env`.
+The pipeline uses `STRAVA_TOKEN` to call Strava APIs. Strava uses OAuth2: the access token is short-lived, while the refresh token is used to generate a new one when it expires. The project currently only reads `STRAVA_TOKEN`, so if the token expires, it must be updated manually in the `.env` file.
 
-Riferimento ufficiale Strava: https://developers.strava.com/docs/authentication
+Official Strava reference: https://developers.strava.com/docs/authentication
 
-1. Creare un'app Strava da:
+1. Create a Strava app from:
 
 ```text
 https://www.strava.com/settings/api
 ```
 
-2. Impostare come callback domain:
+2. Set as callback domain:
 
 ```text
 localhost
 ```
 
-3. Aprire nel browser questo URL sostituendo `YOUR_CLIENT_ID`:
+3. Open this URL in the browser, replacing `YOUR_CLIENT_ID`:
 
 ```text
 https://www.strava.com/oauth/authorize?client_id=YOUR_CLIENT_ID&response_type=code&redirect_uri=http://localhost/exchange_token&approval_prompt=force&scope=read,read_all,profile:read_all,profile:write,activity:read,activity:read_all,activity:write
 ```
 
-4. Autorizzare l'app. Il browser verra rediretto a un URL simile a:
+4. Authorize the app. The browser will be redirected to a URL similar to:
 
 ```text
 http://localhost/exchange_token?state=&code=AUTHORIZATION_CODE&scope=read,activity:write,activity:read,activity:read_all,profile:write,profile:read_all,read_all
 ```
 
-5. Copiare il valore del parametro `AUTHORIZATION_CODE` e scambiarlo con un access token:
+5. Copy the value of the `AUTHORIZATION_CODE` parameter and exchange it for an access token:
 
 ```bash
 curl -X POST https://www.strava.com/oauth/token \
@@ -80,9 +80,9 @@ curl -X POST https://www.strava.com/oauth/token \
   -F grant_type=authorization_code
 ```
 
-6. Copiare `access_token` nella variabile `STRAVA_TOKEN` del file `.env`.
+6. Copy the `access_token` into the `STRAVA_TOKEN` variable in the `.env` file.
 
-Per rigenerare un access token usando il refresh token:
+To regenerate an access token using the refresh token:
 
 ```bash
 curl -X POST https://www.strava.com/oauth/token \
@@ -92,89 +92,88 @@ curl -X POST https://www.strava.com/oauth/token \
   -F grant_type=refresh_token
 ```
 
-Dopo aver modificato `.env`, ricreare almeno il container che usa il token:
+After modifying `.env`, recreate at least the container that uses the token:
 
 ```bash
 docker compose up -d --force-recreate strava-injector
 ```
 
-## Avvio del progetto
+## Starting the project
 
-Avviare tutti i container:
+Start all containers:
 
 ```bash
 docker compose up -d --build
 ```
 
-Verificare lo stato dei servizi:
+Check the status of the services:
 
 ```bash
 docker compose ps
 ```
 
-Servizi principali esposti sull'host:
+Main services exposed on the host:
 
 - Grafana: http://localhost:3000
 - Elasticsearch: http://localhost:9200
 - Logstash HTTP input: http://localhost:8080
 - Spark UI: http://localhost:4040
 
-Credenziali Grafana:
+Grafana credentials:
 
-- utente: `admin`
-- password: valore di `GRAFANA_ADMIN_PASSWORD` in `.env`
+- user: `admin`
+- password: value of `GRAFANA_ADMIN_PASSWORD` in `.env`
 
-Per fermare l'ambiente:
+To stop the environment:
 
 ```bash
 docker compose down
 ```
 
-Per fermarlo eliminando anche i volumi persistenti:
+To stop it and also delete persistent volumes:
 
 ```bash
 docker compose down -v
 ```
 
-## Replay di una corsa Strava
+## Strava run replay
 
-Il container `strava-injector` è un utility container che rimane in attesa. Per lanciare una simulazione:
+The `strava-injector` container is a utility container that waits in the background. To launch a simulation:
 
 ```bash
 docker compose exec strava-injector python scripts/strava_replay.py
 ```
 
-Lo script:
+The script:
 
-- legge le attività disponibili tramite Strava API;
-- mostra una lista numerata;
-- chiede quale attività iniettare;
-- scarica stream GPS, altitudine, frequenza cardiaca, cadenza e distanza;
-- scarica dati meteo e qualità dell'aria da Open-Meteo per data e posizione della corsa;
-- invia gli eventi a Logstash rispettando il ritmo temporale originale della corsa;
-- pulisce gli stream live Redis al termine.
+- reads available activities via Strava API;
+- shows a numbered list;
+- asks which activity to inject;
+- downloads GPS, altitude, heart rate, cadence, and distance streams;
+- downloads weather and air quality data from Open-Meteo for the date and location of the run;
+- sends events to Logstash respecting the original time pace of the run;
+- cleans up Redis live streams when finished.
 
-Per simulare la corsa usando timestamp correnti:
+To simulate the run using current timestamps:
 
 ```bash
 docker compose exec strava-injector python scripts/strava_replay.py --realtime
 ```
 
+## Technologies and infrastructure
 
-## Tecnologie e infrastruttura
+The project consists of the following services:
 
-Il progetto è composto dai seguenti servizi:
+- **Logstash**: exposes an HTTP input on port `8080`, normalizes events, and routes them to the correct Kafka topics.
+- **Kafka**: decouples ingestion and processing via three topics: `running-live-data`, `weatherdata`, `airquality`.
+- **Spark**: reads Kafka topics with Structured Streaming, enriches run points, applies the ML model, writes to Redis and Elasticsearch.
+- **Redis**: maintains the low-latency live state, the current environmental cache, and the dynamic model threshold.
+- **Elasticsearch**: stores enriched data, session summaries, and queryable documents for Grafana.
+- **Grafana**: displays live and historical dashboards, manages alerting.
+- **Open-Meteo**: provides weather and air quality data.
+- **Strava API**: provides activities, GPS streams, and biometric metrics.
 
-- **Logstash**: espone un input HTTP sulla porta `8080`, normalizza gli eventi e li instrada sui topic Kafka corretti.
-- **Kafka**: disaccoppia ingestione e processing tramite tre topic: `running-live-data`, `weatherdata`, `airquality`.
-- **Spark**: legge i topic Kafka con Structured Streaming, arricchisce i punti corsa, applica il modello ML, scrive su Redis ed Elasticsearch.
-- **Redis**: mantiene lo stato live a bassa latenza, la cache ambientale corrente e la soglia dinamica del modello.
-- **Elasticsearch**: conserva dati arricchiti, riepiloghi sessione e documenti interrogabili da Grafana.
-- **Grafana**: visualizza dashboard live e storiche. gestisce alerting.
-- **Open-Meteo**: fornisce dati meteo e qualita dell'aria.
-- **Strava API**: fornisce attività, GPS stream e metriche biometriche.
-
-## Flusso dati
+## Data flow
 
 ```text
 Strava API + Open-Meteo
@@ -194,21 +193,21 @@ Kafka
         v
 Spark Structured Streaming
         |
-        |-- Redis, per dashboard live e cache operativa
-        |-- Elasticsearch, per storico e alert Grafana
+        |-- Redis, for live dashboards and operational cache
+        |-- Elasticsearch, for history and Grafana alerts
 ```
 
-## Topic Kafka
+## Kafka topics
 
-I topic vengono creati automaticamente dal container `kafka-setup`:
+Topics are created automatically by the `kafka-setup` container:
 
-- `running-live-data`: punti corsa Strava ad alta frequenza;
-- `weatherdata`: dati meteo orari;
-- `airquality`: dati qualità aria orari.
+- `running-live-data`: high-frequency Strava run points;
+- `weatherdata`: hourly weather data;
+- `airquality`: hourly air quality data.
 
-Nota: i messaggi Kafka si interrogano dal container `broker`; il container `spark` li consuma e mostra nei log solo il processing.
+Note: Kafka messages are queried from the `broker` container; the `spark` container consumes them and only shows the processing in the logs.
 
-Elencare i topic:
+List topics:
 
 ```bash
 docker compose exec broker /opt/kafka/bin/kafka-topics.sh \
@@ -216,7 +215,7 @@ docker compose exec broker /opt/kafka/bin/kafka-topics.sh \
   --list
 ```
 
-Leggere i messaggi del topic Strava dall'inizio:
+Read messages from the Strava topic from the beginning:
 
 ```bash
 docker compose exec broker /opt/kafka/bin/kafka-console-consumer.sh \
@@ -225,7 +224,7 @@ docker compose exec broker /opt/kafka/bin/kafka-console-consumer.sh \
   --from-beginning
 ```
 
-Leggere solo pochi messaggi e terminare:
+Read only a few messages and terminate:
 
 ```bash
 docker compose exec broker /opt/kafka/bin/kafka-console-consumer.sh \
@@ -235,7 +234,7 @@ docker compose exec broker /opt/kafka/bin/kafka-console-consumer.sh \
   --max-messages 5
 ```
 
-Leggere i topic ambientali:
+Read environmental topics:
 
 ```bash
 docker compose exec broker /opt/kafka/bin/kafka-console-consumer.sh \
@@ -251,7 +250,7 @@ docker compose exec broker /opt/kafka/bin/kafka-console-consumer.sh \
   --max-messages 5
 ```
 
-Descrivere un topic:
+Describe a topic:
 
 ```bash
 docker compose exec broker /opt/kafka/bin/kafka-topics.sh \
@@ -262,27 +261,27 @@ docker compose exec broker /opt/kafka/bin/kafka-topics.sh \
 
 ## Logstash
 
-La configurazione Logstash si trova in:
+The Logstash configuration is located in:
 
 ```text
 logstash/pipeline/logstash.conf
 ```
 
-Logstash riceve eventi JSON da `strava-injector`, applica conversioni e rename dei campi e invia gli eventi a Kafka:
+Logstash receives JSON events from `strava-injector`, applies conversions and field renaming, and sends the events to Kafka:
 
-- `stream_type=strava` va su `running-live-data`;
-- `stream_type=weather` va su `weatherdata`;
-- `stream_type=airquality` va su `airquality`.
+- `stream_type=strava` goes to `running-live-data`;
+- `stream_type=weather` goes to `weatherdata`;
+- `stream_type=airquality` goes to `airquality`.
 
-Vedere i log di Logstash:
+View Logstash logs:
 
 ```bash
 docker compose logs -f logstash
 ```
 
-Poichè la pipeline include `stdout { codec => rubydebug }`, nei log di Logstash si vedono anche gli eventi ricevuti e normalizzati.
+Since the pipeline includes `stdout { codec => rubydebug }`, the received and normalized events are also visible in the Logstash logs.
 
-Inviare un evento di test a Logstash:
+Send a test event to Logstash:
 
 ```bash
 curl -X POST http://localhost:8080 \
@@ -290,7 +289,7 @@ curl -X POST http://localhost:8080 \
   -d '{"stream_type":"weather","session_id":"test","time":"2026-01-01T10:00:00Z","temperature":20.0,"humidity":55.0}'
 ```
 
-Dopo il test, verificare il topic:
+After testing, verify the topic:
 
 ```bash
 docker compose exec broker /opt/kafka/bin/kafka-console-consumer.sh \
@@ -302,40 +301,40 @@ docker compose exec broker /opt/kafka/bin/kafka-console-consumer.sh \
 
 ## Spark
 
-Il container `spark` avvia automaticamente il job streaming definito in:
+The `spark` container automatically starts the streaming job defined in:
 
 ```text
 spark/src/app.py
 ```
 
-Vedere i log Spark:
+View Spark logs:
 
 ```bash
 docker compose logs -f spark
 ```
 
-Aprire la Spark UI:
+Open the Spark UI:
 
 ```text
 http://localhost:4040
 ```
 
-Il job Spark legge i topic Kafka, mantiene una cache ambientale in Redis e scrive:
+The Spark job reads the Kafka topics, maintains an environmental cache in Redis, and writes:
 
-- stream live su Redis;
-- punti arricchiti su Elasticsearch;
-- riepiloghi sessione su Elasticsearch;
-- aggregazioni temporali su Redis.
+- live streams to Redis;
+- enriched points to Elasticsearch;
+- session summaries to Elasticsearch;
+- temporal aggregations to Redis.
 
-Chiavi Redis principali:
+Main Redis keys:
 
-- `env:current`: temperatura, umidita e AQI correnti;
-- `race:live_tracking`: stream live con posizione;
-- `race:live_metrics`: stream live con HR reale, HR atteso e fatica;
-- `race:cardiac_drift_stream`: aggregazioni di efficienza;
-- `model:fatigue_threshold`: soglia di fatica salvata dal training.
+- `env:current`: current temperature, humidity, and AQI;
+- `race:live_tracking`: live stream with position;
+- `race:live_metrics`: live stream with real HR, expected HR, and fatigue;
+- `race:cardiac_drift_stream`: efficiency aggregations;
+- `model:fatigue_threshold`: fatigue threshold saved from training.
 
-Ispezionare Redis:
+Inspect Redis:
 
 ```bash
 docker compose exec redis redis-cli XREVRANGE race:live_tracking + - COUNT 5
@@ -344,29 +343,29 @@ docker compose exec redis redis-cli HGETALL env:current
 docker compose exec redis redis-cli GET model:fatigue_threshold
 ```
 
-Interrogare Elasticsearch:
+Query Elasticsearch:
 
 ```bash
 curl "http://localhost:9200/strava_metrics/_search?pretty&size=5"
 ```
 
-## Training del modello
+## Model training
 
-Il modello viene addestrato con:
+The model is trained with:
 
 ```text
 spark/src/train_model.py
 ```
 
-Dataset di input:
+Input dataset:
 
 ```text
 spark/dataset/historical_runs.csv
 ```
 
-`historical_runs.csv` è un dataset sintetico. Simula le correlazioni tra parametri fisici e ambientali per fornire al modello la logica di base necessaria a calcolare l'affaticamento in tempo reale.
+`historical_runs.csv` is a synthetic dataset. It simulates correlations between physical and environmental parameters to provide the model with the basic logic needed to calculate fatigue in real-time.
 
-Feature usate:
+Features used:
 
 - `cadence`
 - `elevation`
@@ -379,63 +378,63 @@ Label:
 
 - `heart_rate`
 
-Il modello è una pipeline Spark ML composta da `VectorAssembler` e `RandomForestRegressor`. L'output viene salvato nel volume Docker `spark_data`:
+The model is a Spark ML pipeline composed of `VectorAssembler` and `RandomForestRegressor`. The output is saved in the `spark_data` Docker volume:
 
 ```text
 /opt/spark-data/models/hr_fatigue_model
 ```
 
-Eseguire il training:
+Run training:
 
 ```bash
 docker compose exec spark /usr/local/spark/bin/spark-submit /opt/spark-src/train_model.py
 ```
 
-Durante il training vengono generati:
+During training, the following are generated:
 
-- modello in `/opt/spark-data/models/hr_fatigue_model`;
+- model in `/opt/spark-data/models/hr_fatigue_model`;
 - validation set in `/opt/spark-data/dataset_validation`;
-- soglia `model:fatigue_threshold` in Redis, calcolata a partire dall'RMSE.
+- `model:fatigue_threshold` in Redis, calculated from RMSE.
 
-Validare il modello:
+Validate the model:
 
 ```bash
 docker compose exec spark /usr/local/spark/bin/spark-submit /opt/spark-src/validate_model.py
 ```
 
-La validazione stampa:
+The validation prints:
 
-- importanza delle feature;
+- feature importance;
 - RMSE;
 - MAE;
 - R2;
-- prime predizioni sul validation set.
+- first predictions on the validation set.
 
-Il job streaming carica il modello solo all'avvio. Dopo un nuovo training, riavviare Spark per usare il modello aggiornato:
+The streaming job loads the model only at startup. After a new training, restart Spark to use the updated model:
 
 ```bash
 docker compose restart spark
 ```
 
-## Dashboard e alerting
+## Dashboards and alerting
 
-Grafana viene configurato automaticamente dai file in:
+Grafana is automatically configured by the files in:
 
 ```text
 docker/grafana/provisioning
 ```
 
-File principali:
+Main files:
 
-- `datasources/datasources.yaml`: datasource Redis ed Elasticsearch;
-- `dashboards/json/dashboard.json`: dashboard live;
-- `dashboards/json/dashboard_history.json`: dashboard storica;
-- `alerting/alerting.yaml`: regole di alert.
+- `datasources/datasources.yaml`: Redis and Elasticsearch datasources;
+- `dashboards/json/dashboard.json`: live dashboard;
+- `dashboards/json/dashboard_history.json`: historical dashboard;
+- `alerting/alerting.yaml`: alert rules.
 
-La dashboard live legge soprattutto Redis, mentre la dashboard storica legge Elasticsearch.
+The live dashboard mainly reads from Redis, while the historical dashboard reads from Elasticsearch.
 
 
-## Struttura del repository
+## Repository structure
 
 ```text
 StravaEngine/
